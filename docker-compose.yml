@@ -1,0 +1,102 @@
+services:
+  hoppscotch-backend:
+    profiles: ["backend", "app", "admin"]
+    container_name: hoppscotch-backend
+    image: hoppscotch/hoppscotch-backend
+    env_file:
+      - ./.env # Loads environment variables from .env file
+    restart: always
+    environment:
+      - DATABASE_URL=postgresql://postgres:testpass@hoppscotch-db:5432/hoppscotch?connect_timeout=300
+      - PORT=8080
+    depends_on:
+      mailcatcher:
+        condition: service_started
+      hoppscotch-db:
+        condition: service_healthy # Ensures database is ready before starting the app
+    ports:
+      - "3180:80"
+      - "3170:3170" # Backend API
+    command: >
+      sh -c "pnpx prisma migrate deploy && node prod_run.mjs"
+      # Applies database migrations before running the backend service
+
+  hoppscotch-app:
+    profiles: ["app"]
+    image: hoppscotch/hoppscotch-frontend
+    container_name: hoppscotch-frontend
+    env_file:
+      - ./.env
+    depends_on:
+      - hoppscotch-backend
+    ports:
+      - "3080:80"
+      - "3000:3000"
+      - "3200:3200"
+
+  hoppscotch-sh-admin:
+    profiles: ["admin"]
+    image: hoppscotch/hoppscotch-admin
+    container_name: hoppscotch-admin
+    env_file:
+      - ./.env
+    depends_on:
+      - hoppscotch-backend
+    ports:
+      - "3280:80"
+      - "3100:3100"
+
+  hoppscotch-aio:
+    profiles: ["default"]
+    container_name: hoppscotch-aio
+    image: hoppscotch/hoppscotch
+    env_file:
+      - ./.env # Loads environment variables from .env file
+    environment:
+      # Database connection string for Prisma
+      - DATABASE_URL=postgresql://postgres:testpass@hoppscotch-db:5432/hoppscotch?connect_timeout=300
+    depends_on:
+      mailcatcher:
+        condition: service_started
+      hoppscotch-db:
+        condition: service_healthy # Ensures database is ready before starting the app
+    ports:
+      - "3000:3000" # Frontend/UI
+      - "3100:3100" # Admin Panel
+      - "3170:3170" # Backend API
+      - "3200:3200" # Frontend API
+      - "3080:80"
+    command: >
+      sh -c "pnpx prisma migrate deploy && node /usr/src/app/aio_run.mjs"
+      # Applies database migrations before running the backend service
+
+  # PostgreSQL database service for Hoppscotch
+  hoppscotch-db:
+    image: postgres:15
+    ports:
+      - "5432:5432" # Exposes PostgreSQL database on port 5432
+    user: postgres
+    environment:
+      # PostgreSQL default user and credentials
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: testpass # ⚠️ Change this for security
+      POSTGRES_DB: hoppscotch # Database name
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "sh -c 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}'",
+        ]
+      interval: 5s # Checks every 5 seconds
+      timeout: 5s
+      retries: 10 # Tries 10 times before marking service as unhealthy
+    volumes:
+      - hoppscotch-db:/var/lib/postgresql/data # Persists database data across container restarts
+
+  mailcatcher:
+    image: dockage/mailcatcher:0.9.0
+    ports:
+      - "1080:1080"
+      - "1025:1025"
+volumes:
+  hoppscotch-db: # Named volume for PostgreSQL data storage
