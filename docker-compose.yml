@@ -10,7 +10,7 @@ services:
       - DATABASE_URL=postgresql://postgres:testpass@hoppscotch-db:5432/hoppscotch?connect_timeout=300
       - PORT=8080
     depends_on:
-      mailcatcher:
+      hoppscotch-mailserver:
         condition: service_started
       hoppscotch-db:
         condition: service_healthy # Ensures database is ready before starting the app
@@ -50,13 +50,14 @@ services:
     profiles: ["default"]
     container_name: hoppscotch-aio
     image: hoppscotch/hoppscotch
+    restart: "always"
     env_file:
       - ./.env # Loads environment variables from .env file
     environment:
       # Database connection string for Prisma
       - DATABASE_URL=postgresql://postgres:testpass@hoppscotch-db:5432/hoppscotch?connect_timeout=300
     depends_on:
-      mailcatcher:
+      hoppscotch-mailserver:
         condition: service_started
       hoppscotch-db:
         condition: service_healthy # Ensures database is ready before starting the app
@@ -73,6 +74,7 @@ services:
   # PostgreSQL database service for Hoppscotch
   hoppscotch-db:
     image: postgres:15
+    container_name: hoppscotch-db
     ports:
       - "5432:5432" # Exposes PostgreSQL database on port 5432
     user: postgres
@@ -93,10 +95,15 @@ services:
     volumes:
       - hoppscotch-db:/var/lib/postgresql/data # Persists database data across container restarts
 
-  mailcatcher:
+  hoppscotch-mailserver:
     image: dockage/mailcatcher:0.9.0
+    container_name: hoppscotch-mailserver
     ports:
       - "1080:1080"
       - "1025:1025"
+    environment:
+      EMAIL_HOST_USER: hoppscotch
+      EMAIL_HOST_PASSWORD: testpass
+
 volumes:
   hoppscotch-db: # Named volume for PostgreSQL data storage
